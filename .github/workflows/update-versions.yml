@@ -59,6 +59,7 @@ jobs:
           git add api/versions.json
           git commit -m "Update versions.json to current: ${{ github.event.inputs.current }}"
           git push origin HEAD:main
+          NEW_SHA=$(git rev-parse HEAD)
 
   trigger_deploy:
     needs: update_file

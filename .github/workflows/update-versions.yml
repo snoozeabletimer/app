@@ -1,0 +1,63 @@
+name: Update versions.json
+
+permissions:
+  contents: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      current:
+        description: "Current version"
+        required: true
+        type: string
+      all:
+        description: "JSON array string of all versions"
+        required: true
+        type: string
+
+jobs:
+  update_file:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate inputs and update versions.json
+        run: |
+          set -euo pipefail
+
+          CURRENT='${{ github.event.inputs.current }}'
+          ALL_RAW='${{ github.event.inputs.all }}'
+
+          # Reject empty strings
+          if [ -z "$CURRENT" ]; then
+            echo "Input 'current' is empty." >&2
+            exit 1
+          fi
+
+          if [ -z "$ALL_RAW" ]; then
+            echo "Input 'all' is empty." >&2
+            exit 1
+          fi
+
+          # Validate ALL_RAW is a JSON array and normalize to array of strings
+          if ! echo "$ALL_RAW" | jq -e 'if type=="array" then map(tostring) else error("not an array") end' >/dev/null 2>&1; then
+            echo "Input 'all' is not a valid JSON array." >&2
+            exit 1
+          fi
+
+          ALL_NORMALIZED=$(echo "$ALL_RAW" | jq -c 'map(tostring)')
+
+          jq -n --arg current "$CURRENT" --argjson all "$ALL_NORMALIZED" '{current: $current, all: $all}' > api/versions.json
+
+      - name: Commit and push changes
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add api/versions.json
+          git commit -m "Update versions.json to current: ${{ github.event.inputs.current }}"
+          git push origin HEAD:main
+
+  trigger_deploy:
+    needs: update_file
+    uses: ./.github/workflows/static.yml
